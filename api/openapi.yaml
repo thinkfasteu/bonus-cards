@@ -1,0 +1,478 @@
+openapi: 3.1.0
+info:
+  title: FTG Sportfabrik - Digital Bonus Cards API
+  description: REST API for managing digital bonus cards (Phase-1 Pilot)
+  version: 1.0.0
+  contact:
+    name: FTG Sportfabrik Development Team
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+
+tags:
+  - name: System
+    description: System health and status
+  - name: Cards
+    description: Bonus card management
+  - name: Admin
+    description: Administrative operations
+  - name: Reports
+    description: Transaction reporting
+
+components:
+  schemas:
+    CardSnapshot:
+      type: object
+      required:
+        - cardId
+        - serial
+        - memberDisplayName
+        - product
+        - state
+        - expiresAt
+      properties:
+        cardId:
+          type: string
+          format: uuid
+          description: Unique card identifier
+        serial:
+          type: string
+          description: Human-readable card serial number
+        memberDisplayName:
+          type: string
+          description: Member's display name for staff screen
+        product:
+          type: string
+          enum: [cycling_bonus, cycling_unlimited]
+          description: Product type
+        state:
+          type: string
+          enum: [Active, Expired, UsedUp, Cancelled]
+          description: Current card state
+        remainingUses:
+          type: integer
+          nullable: true
+          description: Remaining uses (null for unlimited products)
+        expiresAt:
+          type: string
+          format: date-time
+          description: Card expiration timestamp (ISO 8601)
+      example:
+        cardId: "123e4567-e89b-12d3-a456-426614174000"
+        serial: "BC-2025-001234"
+        memberDisplayName: "Max Mustermann"
+        product: "cycling_bonus"
+        state: "Active"
+        remainingUses: 10
+        expiresAt: "2025-12-31T23:59:59.000Z"
+
+    IssueCardRequest:
+      type: object
+      required:
+        - memberId
+        - product
+      properties:
+        memberId:
+          type: string
+          format: uuid
+          description: Member's unique identifier
+        product:
+          type: string
+          enum: [cycling_bonus, cycling_unlimited]
+          description: Product type to issue
+        expiresAt:
+          type: string
+          format: date-time
+          description: Optional custom expiration (ISO 8601). If not provided, server calculates based on product rules
+      example:
+        memberId: "456e7890-e12c-34d5-b678-901234567890"
+        product: "cycling_bonus"
+
+    DeductRequest:
+      type: object
+      required:
+        - confirm
+      properties:
+        confirm:
+          type: boolean
+          description: Manual confirmation flag (must be true)
+      example:
+        confirm: true
+
+    RollbackRequest:
+      type: object
+      required:
+        - reasonCode
+      properties:
+        reasonCode:
+          type: string
+          enum: [MISTAKE, FRAUD_SUSPECTED, CARD_LOST, OTHER]
+          description: Reason for rollback
+        note:
+          type: string
+          description: Optional additional notes
+      example:
+        reasonCode: "MISTAKE"
+        note: "Customer was charged twice by mistake"
+
+    CancelRequest:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+          enum: [EXPIRED, FRAUD_SUSPECTED, CARD_LOST, CUSTOMER_REQUEST, OTHER]
+          description: Reason for cancellation
+        note:
+          type: string
+          description: Optional additional notes
+      example:
+        reasonCode: "CUSTOMER_REQUEST"
+        note: "Customer requested cancellation due to relocation"
+
+    HealthResponse:
+      type: object
+      required:
+        - ok
+        - dbTime
+      properties:
+        ok:
+          type: boolean
+          description: System health status
+        dbTime:
+          type: string
+          format: date-time
+          description: Database server timestamp
+      example:
+        ok: true
+        dbTime: "2025-09-20T06:27:08.537Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          description: Additional error details
+      example:
+        error: "Validation failed"
+        details:
+          - "Field 'memberId' is required"
+          - "Field 'product' must be one of: cycling_bonus, cycling_unlimited"
+
+  securitySchemes:
+    StaffAuth:
+      type: apiKey
+      in: header
+      name: x-staff-username
+      description: Staff username for authentication
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns system health status and database connectivity
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '500':
+          description: System error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards:
+    post:
+      tags: [Cards]
+      summary: Issue new bonus card
+      description: Creates a new bonus card for a member
+      security:
+        - StaffAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueCardRequest'
+      responses:
+        '201':
+          description: Card issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardSnapshot'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Member not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{cardId}:
+    get:
+      tags: [Cards]
+      summary: Get card details
+      description: Returns current card status and details
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Card unique identifier
+      responses:
+        '200':
+          description: Card details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardSnapshot'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{cardId}/deduct:
+    post:
+      tags: [Cards]
+      summary: Deduct card usage
+      description: Deducts one use from the bonus card and sends confirmation email
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Card unique identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeductRequest'
+      responses:
+        '200':
+          description: Usage deducted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardSnapshot'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Illegal state transition (card expired, used up, or cancelled)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{cardId}/rollback:
+    post:
+      tags: [Admin]
+      summary: Rollback last deduction
+      description: Reverses the last card deduction (admin only)
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Card unique identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '200':
+          description: Rollback completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardSnapshot'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{cardId}/cancel:
+    post:
+      tags: [Admin]
+      summary: Cancel card
+      description: Cancels a bonus card (admin only)
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Card unique identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+      responses:
+        '200':
+          description: Card cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardSnapshot'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /reports/transactions:
+    get:
+      tags: [Reports]
+      summary: Export transaction report
+      description: Exports transactions in CSV format for a date range (admin only)
+      security:
+        - StaffAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: Start date (ISO 8601)
+          example: "2025-01-01T00:00:00.000Z"
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: End date (ISO 8601)
+          example: "2025-12-31T23:59:59.999Z"
+      responses:
+        '200':
+          description: CSV transaction report
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: |
+                serial,staff_username,product,timestamp,event_type,delta,reason_code
+                BC-2025-001234,reception_user,cycling_bonus,2025-09-20T10:30:00.000Z,Deduct,-1,
+                BC-2025-001234,admin_user,cycling_bonus,2025-09-20T11:00:00.000Z,Rollback,1,MISTAKE
+        '400':
+          description: Validation error (invalid date format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Admin role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
