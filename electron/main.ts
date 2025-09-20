@@ -1,5 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, shell } from 'electron';
 import * as path from 'path';
+import { getConfigManager, AppConfig } from './config';
+import { logger } from './logger';
 
 // Keep a global reference of the window object
 let mainWindow: BrowserWindow | null = null;
@@ -62,6 +64,14 @@ function createWindow(): void {
 
 // This method will be called when Electron has finished initialization
 app.whenReady().then(() => {
+  // Initialize config manager
+  const configManager = getConfigManager();
+  logger.info('FTG Sportfabrik Bonus Cards starting up');
+  logger.info('Config loaded from:', configManager.getConfigPath());
+
+  // Create application menu
+  createApplicationMenu();
+
   createWindow();
 
   app.on('activate', () => {
@@ -100,6 +110,150 @@ ipcMain.handle('app-name', () => {
 ipcMain.handle('get-env', (_, key: string) => {
   return process.env[key];
 });
+
+// Config IPC handlers
+ipcMain.handle('get-config', () => {
+  const configManager = getConfigManager();
+  return configManager.getConfig();
+});
+
+ipcMain.handle('get-config-value', (_, key: keyof AppConfig) => {
+  const configManager = getConfigManager();
+  return configManager.get(key);
+});
+
+ipcMain.handle('get-config-path', () => {
+  const configManager = getConfigManager();
+  return configManager.getConfigPath();
+});
+
+// Logging IPC handlers
+ipcMain.handle('get-logs-directory', () => {
+  return logger.getLogsDirectory();
+});
+
+ipcMain.handle('get-log-files', () => {
+  return logger.getLogFiles();
+});
+
+ipcMain.handle('get-recent-logs', (_, lines: number) => {
+  return logger.getRecentLogs(lines);
+});
+
+ipcMain.handle('read-log-file', (_, fileName: string) => {
+  return logger.readLogFile(fileName);
+});
+
+// Update checking functionality
+async function checkForUpdates(): Promise<void> {
+  try {
+    logger.info('Checking for updates...');
+    
+    // GitHub API to check latest release
+    const repoOwner = 'thinkfasteu';
+    const repoName = 'bonus-cards';
+    const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/releases/latest`;
+    
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'FTG-Bonus-Cards-Desktop'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+    
+    const releaseData = await response.json() as any;
+    const latestVersion = releaseData.tag_name?.replace(/^v/, '') || '';
+    const currentVersion = app.getVersion();
+    
+    logger.info('Update check result', {
+      currentVersion,
+      latestVersion,
+      isUpdateAvailable: latestVersion !== currentVersion
+    });
+    
+    if (latestVersion && latestVersion !== currentVersion) {
+      // Update available
+      const result = await dialog.showMessageBox(mainWindow!, {
+        type: 'info',
+        title: 'Update verfügbar',
+        message: `Eine neue Version ist verfügbar!`,
+        detail: `Aktuelle Version: ${currentVersion}\nNeue Version: ${latestVersion}\n\nMöchten Sie die GitHub-Releases-Seite öffnen?`,
+        buttons: ['GitHub öffnen', 'Später', 'Release Notes'],
+        defaultId: 0,
+        cancelId: 1
+      });
+      
+      if (result.response === 0) {
+        // Open GitHub releases page
+        await shell.openExternal(`https://github.com/${repoOwner}/${repoName}/releases/latest`);
+      } else if (result.response === 2) {
+        // Show release notes
+        await shell.openExternal(releaseData.html_url || `https://github.com/${repoOwner}/${repoName}/releases/latest`);
+      }
+    } else {
+      // No update available
+      await dialog.showMessageBox(mainWindow!, {
+        type: 'info',
+        title: 'Kein Update verfügbar',
+        message: 'Sie verwenden bereits die neueste Version.',
+        detail: `Aktuelle Version: ${currentVersion}`,
+        buttons: ['OK']
+      });
+    }
+  } catch (error) {
+    logger.error('Update check failed:', error);
+    
+    await dialog.showMessageBox(mainWindow!, {
+      type: 'error',
+      title: 'Update-Prüfung fehlgeschlagen',
+      message: 'Die Update-Prüfung konnte nicht durchgeführt werden.',
+      detail: 'Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es später erneut.',
+      buttons: ['OK']
+    });
+  }
+}
+
+// Create application menu
+function createApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Datei',
+      submenu: [
+        {
+          label: 'Beenden',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+          click: () => {
+            app.quit();
+          }
+        }
+      ]
+    },
+    {
+      label: 'Hilfe',
+      submenu: [
+        {
+          label: 'Nach Updates suchen',
+          click: () => {
+            checkForUpdates();
+          }
+        },
+        {
+          label: 'Über FTG Bonus Cards',
+          click: () => {
+            // TODO: Show about dialog
+            console.log('About dialog requested');
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 
 // Handle app protocol for security
 app.setAsDefaultProtocolClient('bonus-cards');

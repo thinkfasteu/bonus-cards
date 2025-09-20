@@ -87,5 +87,46 @@ export const schemas = {
   transactionReport: z.object({
     from: z.string().datetime('Invalid from date format (ISO 8601 required)'),
     to: z.string().datetime('Invalid to date format (ISO 8601 required)')
+  }),
+
+  // Email receipts query
+  emailReceipts: z.object({
+    status: z.enum(['Queued', 'Sent', 'Failed']).optional(),
+    limit: z.string().regex(/^\d+$/, 'Limit must be a number').optional().transform(val => {
+      const num = val ? parseInt(val, 10) : 50;
+      return Math.min(Math.max(num, 1), 100); // Between 1 and 100
+    }),
+    offset: z.string().regex(/^\d+$/, 'Offset must be a number').optional().transform(val => {
+      const num = val ? parseInt(val, 10) : 0;
+      return Math.max(num, 0); // Minimum 0
+    })
+  }),
+
+  // Email retry request
+  emailRetry: z.object({
+    receiptIds: z.array(z.string().uuid('Invalid receipt ID format')).min(1, 'At least one receipt ID is required').max(50, 'Maximum 50 receipts can be retried at once')
+  }),
+
+  // Staff login request
+  staffLogin: z.object({
+    username: z.string().min(1, 'Username is required').max(50, 'Username too long'),
+    password: z.string().min(1, 'Password is required')
+  }),
+
+  // Pagination query (reusable)
+  pagination: z.object({
+    limit: z.string().regex(/^\d+$/, 'Limit must be a number').optional().transform(val => {
+      const num = val ? parseInt(val, 10) : 50;
+      return Math.min(Math.max(num, 1), 100);
+    }),
+    offset: z.string().regex(/^\d+$/, 'Offset must be a number').optional().transform(val => {
+      const num = val ? parseInt(val, 10) : 0;
+      return Math.max(num, 0);
+    })
+  }),
+
+  // Numeric ID parameter validation
+  numericIdParam: z.object({
+    id: z.string().regex(/^\d+$/, 'ID must be a number').transform(val => parseInt(val, 10))
   })
 };

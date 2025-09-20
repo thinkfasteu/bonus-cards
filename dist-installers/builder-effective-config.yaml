@@ -1,0 +1,49 @@
+directories:
+  output: dist-installers
+  buildResources: build
+appId: com.ftg-sportfabrik.bonus-cards
+productName: FTG Sportfabrik Bonus Cards
+files:
+  - filter:
+      - dist/electron/main.js
+      - dist/electron/preload.js
+      - dist/electron/renderer/**/*
+      - node_modules/**/*
+      - package.json
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+win:
+  target:
+    - target: msi
+      arch:
+        - x64
+  icon: build/icon.ico
+  publisherName: FTG Sportfabrik
+msi:
+  oneClick: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: FTG Bonus Cards
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  icon: build/icon.png
+  category: Office
+  desktop:
+    Name: FTG Sportfabrik Bonus Cards
+    Comment: Digital Bonus Card Management System
+    Categories: Office;Business;
+deb:
+  packageCategory: office
+  priority: optional
+publish:
+  provider: github
+  owner: thinkfasteu
+  repo: bonus-cards
+electronVersion: 28.3.3

@@ -1,0 +1,4 @@
+dist-installers/*.deb filter=lfs diff=lfs merge=lfs -text
+dist-installers/*.AppImage filter=lfs diff=lfs merge=lfs -text
+dist-installers/*.msi filter=lfs diff=lfs merge=lfs -text
+dist-installers/linux-unpacked/* filter=lfs diff=lfs merge=lfs -text

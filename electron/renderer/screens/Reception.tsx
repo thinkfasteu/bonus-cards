@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ApiClient, ApiError, CardSnapshot } from '../lib/api';
 import { User } from '../App';
 import ScanInput from '../components/ScanInput';
 import CardPanel from '../components/CardPanel';
+import StatusIndicator from '../components/StatusIndicator';
 import { Toast, ToastContainer } from '../components/Toast';
 import { generateIdempotencyKey } from '../lib/idempotency';
 
@@ -24,6 +25,27 @@ const ReceptionScreen: React.FC<ReceptionScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('');
+
+  // Get API base URL from config on mount
+  useEffect(() => {
+    const getApiUrl = async () => {
+      try {
+        if (window.electronAPI) {
+          const url = await window.electronAPI.getConfigValue('DESKTOP_API_BASE_URL');
+          setApiBaseUrl(url);
+        } else {
+          // Fallback for web mode
+          setApiBaseUrl('http://localhost:3000');
+        }
+      } catch (error) {
+        console.error('Failed to get API base URL:', error);
+        setApiBaseUrl('http://localhost:3000');
+      }
+    };
+    
+    getApiUrl();
+  }, []);
 
   const addToast = useCallback((type: Toast['type'], message: string, duration?: number) => {
     const toast: Toast = {
@@ -151,7 +173,15 @@ const ReceptionScreen: React.FC<ReceptionScreenProps> = ({
   return (
     <div className="screen">
       <div className="screen-header">
-        <h1 className="screen-title">Empfang - Besuchsverrechnung</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <h1 className="screen-title">Empfang - Besuchsverrechnung</h1>
+          {apiBaseUrl && (
+            <StatusIndicator 
+              apiBaseUrl={apiBaseUrl}
+              checkInterval={30000}
+            />
+          )}
+        </div>
         <div className="user-info">
           <span>Angemeldet als: {user.displayName}</span>
           {user.role === 'admin' && (

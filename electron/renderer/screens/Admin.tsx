@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ApiClient, ApiError, CardSnapshot, AppConfig } from '../lib/api';
 import { User } from '../App';
 import CardPanel from '../components/CardPanel';
@@ -12,12 +12,38 @@ interface AdminScreenProps {
   onNavigateToReception: () => void;
 }
 
+interface EmailReceipt {
+  id: number;
+  emailTo: string;
+  memberDisplayName: string;
+  productLabel: string;
+  cardSerial: string;
+  status: 'Queued' | 'Sent' | 'Failed';
+  attempts: number;
+  createdAt: string;
+  sentAt: string | null;
+  lastError: string | null;
+  processedByStaff: string | null;
+}
+
+interface EmailStats {
+  total: number;
+  byStatus: {
+    Queued: { count: number };
+    Sent: { count: number };
+    Failed: { count: number };
+  };
+}
+
+type AdminTab = 'cards' | 'emails' | 'reports';
+
 const AdminScreen: React.FC<AdminScreenProps> = ({ 
   apiClient, 
   user, 
   onLogout, 
   onNavigateToReception 
 }) => {
+  const [activeTab, setActiveTab] = useState<AdminTab>('cards');
   const [currentCard, setCurrentCard] = useState<CardSnapshot | null>(null);
   const [searchSerial, setSearchSerial] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,6 +52,12 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
   const [processing, setProcessing] = useState(false);
   const [appConfig, setAppConfig] = useState<AppConfig[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  
+  // Email management state
+  const [emailReceipts, setEmailReceipts] = useState<EmailReceipt[]>([]);
+  const [emailStats, setEmailStats] = useState<EmailStats | null>(null);
+  const [emailFilter, setEmailFilter] = useState<'all' | 'Queued' | 'Sent' | 'Failed'>('all');
+  const [emailLoading, setEmailLoading] = useState(false);
 
   const addToast = useCallback((type: Toast['type'], message: string, duration?: number) => {
     const toast: Toast = {
@@ -172,6 +204,112 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
       addToast('error', 'Fehler beim Export');
     }
   };
+
+  // Email management functions
+  const loadEmailReceipts = useCallback(async () => {
+    setEmailLoading(true);
+    try {
+      const status = emailFilter === 'all' ? undefined : emailFilter;
+      const response = await fetch(`/admin/email-receipts?limit=50&offset=0${status ? `&status=${status}` : ''}`, {
+        headers: {
+          'x-staff-username': user.username
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to load email receipts');
+      }
+      
+      const data = await response.json();
+      setEmailReceipts(data.receipts || []);
+    } catch (error) {
+      console.error('Error loading email receipts:', error);
+      addToast('error', 'Fehler beim Laden der E-Mail-Belege');
+    } finally {
+      setEmailLoading(false);
+    }
+  }, [emailFilter, user.username, addToast]);
+
+  const loadEmailStats = useCallback(async () => {
+    try {
+      const response = await fetch('/admin/email-receipts/stats', {
+        headers: {
+          'x-staff-username': user.username
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to load email stats');
+      }
+      
+      const stats = await response.json();
+      setEmailStats(stats);
+    } catch (error) {
+      console.error('Error loading email stats:', error);
+      addToast('error', 'Fehler beim Laden der E-Mail-Statistiken');
+    }
+  }, [user.username, addToast]);
+
+  const handleRetryEmail = async (receiptId: number) => {
+    try {
+      const response = await fetch(`/admin/email-receipts/retry/${receiptId}`, {
+        method: 'POST',
+        headers: {
+          'x-staff-username': user.username,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to retry email');
+      }
+      
+      addToast('success', 'E-Mail erfolgreich zur Wiederholung markiert');
+      await loadEmailReceipts();
+      await loadEmailStats();
+    } catch (error) {
+      console.error('Error retrying email:', error);
+      addToast('error', 'Fehler beim Wiederholen der E-Mail');
+    }
+  };
+
+  const formatDateTime = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    return new Intl.DateTimeFormat('de-DE', {
+      timeZone: 'Europe/Berlin',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(dateStr));
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'Sent': return 'badge-success';
+      case 'Failed': return 'badge-danger';
+      case 'Queued': return 'badge-warning';
+      default: return 'badge-secondary';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'Sent': return 'Gesendet';
+      case 'Failed': return 'Fehlgeschlagen';
+      case 'Queued': return 'In Warteschlange';
+      default: return status;
+    }
+  };
+
+  // Load email data when switching to email tab
+  useEffect(() => {
+    if (activeTab === 'emails') {
+      loadEmailReceipts();
+      loadEmailStats();
+    }
+  }, [activeTab, loadEmailReceipts, loadEmailStats]);
 
   return (
     <div className="screen">

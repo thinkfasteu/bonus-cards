@@ -6,12 +6,43 @@ import { dbHealth } from './db';
 import cardsRoutes from './routes/cards';
 import adminRoutes from './routes/admin';
 import reportsRoutes from './routes/reports';
+import emailRoutes from './routes/emails';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configure CORS with strict origin policy
+const getAllowedOrigins = (): string[] => {
+  const allowedOrigins = process.env.ALLOWED_ORIGINS;
+  if (!allowedOrigins) {
+    // Default origins for development
+    return ['http://localhost:3001', 'http://localhost:3000'];
+  }
+  return allowedOrigins.split(',').map(origin => origin.trim());
+};
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = getAllowedOrigins();
+    
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS: Blocked request from unauthorized origin: ${origin}`);
+      callback(new Error('Not allowed by CORS policy'), false);
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200 // Support legacy browsers
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -43,6 +74,8 @@ app.get('/health', async (req: Request, res: Response) => {
 app.use('/cards', cardsRoutes);
 app.use('/cards', adminRoutes); // Admin routes are nested under /cards/:cardId/...
 app.use('/reports', reportsRoutes);
+app.use('/admin', emailRoutes); // Email admin routes
+app.use('/admin', emailRoutes); // Email management routes
 
 // 404 handler
 app.use('*', (req: Request, res: Response) => {

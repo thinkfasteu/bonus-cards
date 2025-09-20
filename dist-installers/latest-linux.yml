@@ -1,0 +1,12 @@
+version: 1.0.0
+files:
+  - url: FTG-Sportfabrik-Bonus-Cards-1.0.0.AppImage
+    sha512: q6fXutWmVjcTpvQM5PvyHqfJ8UZnSZbAfeE9bsyY7RYoDzwusnM5yOYoD92iT/2nKj+wQJ5wMD7ucFrqLGTr9Q==
+    size: 112680734
+    blockMapSize: 118578
+  - url: bonus-cards_1.0.0_amd64.deb
+    sha512: 3lhl/udWOz6FAFWqoN57VWpsyVHIHPiXDG5u8fic2nBPTzXsBcNAfBKUrITmERrFBMgkEw2tJtPshzK1PgBurw==
+    size: 77583592
+path: FTG-Sportfabrik-Bonus-Cards-1.0.0.AppImage
+sha512: q6fXutWmVjcTpvQM5PvyHqfJ8UZnSZbAfeE9bsyY7RYoDzwusnM5yOYoD92iT/2nKj+wQJ5wMD7ucFrqLGTr9Q==
+releaseDate: '2025-09-20T08:58:54.574Z'
